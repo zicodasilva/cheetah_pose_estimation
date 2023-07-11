@@ -427,6 +427,30 @@ def init_trajectory(root_dir: str,
                     shutter_delay_estimation: bool = False,
                     enable_ppm: bool = False,
                     hand_labeled_data: bool = False) -> CheetahEstimator:
+    """Initialises a trajectory optimisation problem for the `CheetahEstimator` object.
+
+    Args:
+        root_dir (str): The root directory that contains the cheetah videos.
+        data_path (str): The data path that is relative to the root directory to select a particular trial, e.g. 2019_03_07/phantom/run.
+        cheetah_name (str): The name of the cheetah subject, e.g. phantom. This value is usually present in the `data_path`.
+        kinetic_dataset (bool): Flag to determine whether we are using the kinetic dataset or AcinoSet. These are the two datasets supported.
+        start_frame (int, optional): Start frame of the video to use in the estimation. Defaults to -1 which instead uses the value inside the `metadata.json`.
+        end_frame (int, optional): End frame of the video to use in the estimation. Defaults to -1 which instead uses the value inside the `metadata.json`.
+        dlc_thresh (float, optional): The DeepLabCut threshold to discard 2D pose estimates. Defaults to 0.5.
+        include_camera_constraints (bool, optional): Flag that controls whether we want the camera constraints setup. Defaults to True.
+        enable_eom_slack (bool, optional): Flag that enables a noise variable on equation of motion (EOM), i.e. EOM=σ instead of EOM=0. Defaults to True.
+        kinematic_model (bool, optional): Flag that indicates if we are using a kinematic model or kinetic model of the cheetah. Note that certain methods requires one or the other, but this will be communicated when running said method. Defaults to False.
+        monocular_enable (bool, optional): Flag that indicates whether we are using monocular or multi-view setup. Defaults to False.
+        override_monocular_cam (Optional[int], optional): It is possible to override the set view point for monocular using this variable. Defaults to None which instead uses the value inside the `metadata.json`.
+        disable_contact_lcp (bool, optional): Flag disables the use of a linear complementarity constraint to describe the contacts. Defaults to True.
+        bound_eom_error (Optional[Tuple[float, float]], optional): Bound the EOM noise variable, i.e. b<=σ<=a. Defaults to None.
+        shutter_delay_estimation (bool, optional): Enables the shutter delay estimation for the multi-view camera setup. Defaults to False.
+        enable_ppm (bool, optional): Enables the pairwise pseudo measurements (PPM) in the optimisation problem. Defaults to False.
+        hand_labeled_data (bool, optional): Flag to use hand labelled data instead of DeepLabCut predictions. Defaults to False.
+
+    Returns:
+        CheetahEstimator: cheetah estimator object that stores and manages the data related to the trajectory.
+    """
     if cheetah_name not in ("jules", "phantom", "shiraz", "arabia"):
         cheetah_name = "acinoset"
     model_name = f"{cheetah_name}-02" if kinetic_dataset else cheetah_name
@@ -523,6 +547,22 @@ def estimate_kinematics(estimator: CheetahEstimator,
                         motion_model_window_size: int = 4,
                         motion_model_sparse_solution: bool = True,
                         out_dir_prefix: Optional[str] = None) -> bool:
+    """Estimates the trajectory of the cheetah using the kinematic model of motion.
+
+    Args:
+        estimator (CheetahEstimator): Cheetah estimator object that was created using `init_trajectory` method.
+        solver_output (bool, optional): Flag that controls the output from the PyoMo solver. Defaults to True.
+        monocular_constraints (bool, optional): Flag that enables the extra monocular constraints used to regularise the solution. Defaults to False.
+        disable_pose_prior (bool, optional): Flag to disable the pose prior. Defaults to False.
+        disable_motion_prior (bool, optional): Flag to disable the motion prior. Defaults to False.
+        pose_model_num_components (int, optional): Number of components to use for the pose GMM. Defaults to 5.
+        motion_model_window_size (int, optional): The window size used for the linear regression model of motion. Defaults to 4.
+        motion_model_sparse_solution (bool, optional): Flag to determine whether a sparse solution (LASSO) or a regular (L2-norm) is used for linear regression. Defaults to True.
+        out_dir_prefix (Optional[str], optional): The output directory to save the result. Defaults to None which would save the result in the same location as `root_dir/data_path`.
+
+    Returns:
+        bool: Whether the optimisation converged to a satisfactory point.
+    """
     # Check that a simple kinematic model of the cheetah is used. Otherwise this process won't produce the best results.
     robot, m = estimator.model, cast(pyo.ConcreteModel, estimator.model.m)
     params = estimator.params
@@ -601,6 +641,14 @@ def determine_contacts(estimator: CheetahEstimator,
                        monocular: bool = False,
                        verbose: bool = True,
                        out_dir_prefix: Optional[str] = None):
+    """Contact detection using the kinematics as a simple heuristic for contact determination.
+
+    Args:
+        estimator (CheetahEstimator): Cheetah estimator object that was created using `init_trajectory` method.
+        monocular (bool, optional): Flag that determines whether the monocular solution should be used. Defaults to False.
+        verbose (bool, optional): Flag to control the output level. Defaults to True.
+        out_dir_prefix (Optional[str], optional): The output directory to save the result. Defaults to None which would save the result in the same location as `root_dir/data_path`.
+    """
     assert hasattr(estimator.model, "eom_f"), "Dynamic model of the cheetah is required to determine contacts."
     robot, m = estimator.model, cast(pyo.ConcreteModel, estimator.model.m)
     print("Initialise trajectory with previous estimation of kinematics")
@@ -660,6 +708,29 @@ def estimate_kinetics(estimator: CheetahEstimator,
                       plot: bool = False,
                       out_fname: str = "fte",
                       out_dir_prefix: Optional[str] = None) -> bool:
+    """Estimates the trajectory of the cheetah using the dynamic model of motion.
+
+    Args:
+        estimator (CheetahEstimator): Cheetah estimator object that was created using `init_trajectory` method.
+        init_torques (bool, optional): Flag to estimate the joint torques prior to solving the optimisation problem. Note this requires the `init_prev_kinematic_solution` flag to be True. Defaults to True.
+        auto (bool, optional): Flag to determine whether we use contact points that are estimated or not. Defaults to True.
+        use_2d_reprojections (bool, optional): Flag to include the 2D reprojections in the cost function as opposed to a 3D kinematic cost from previous kinematic solution. Defaults to True.
+        solver_output (bool, optional): Flag that controls the output from the PyoMo solver. Defaults to True.
+        init_prev_kinematic_solution (bool, optional): Flag to initialise the kinematic state to the previous solution to `estimate_kinematics` function. Defaults to True.
+        synthesised_grf (bool, optional): Flag to indicate if we should use synthesised ground reaction force (GRF). Defaults to False.
+        no_slip (bool, optional): Flag to indicate if we should use the no-slip model of contact. Defaults to True.
+        joint_estimation (bool, optional): Flag to indicate if we should perform a joint estimation of torques and GRF. Defaults to False.
+        fix_grf (bool, optional): Flag to fix the GRF prior to solving the problem. Defaults to True.
+        ground_constraint (bool, optional): Flag to ensure the foot is on the ground during a contact phase. Defaults to False.
+        disable_pose_prior (bool, optional): Flag to disable the pose prior. Defaults to False.
+        disable_motion_prior (bool, optional): Flag to disable the motion prior. Defaults to False.
+        plot (bool, optional): Flag to output plots generated during the process. Defaults to False.
+        out_fname (str, optional): Filename of the output files. Defaults to "fte".
+        out_dir_prefix (Optional[str], optional): The output directory to save the result. Defaults to None which would save the result in the same location as `root_dir/data_path`.
+
+    Returns:
+        bool: Whether the optimisation converged to a satisfactory point.
+    """
     assert hasattr(estimator.model, "eom_f"), "Dynamic model of the cheetah is required."
     robot, m = estimator.model, cast(pyo.ConcreteModel, estimator.model.m)
     params = estimator.params
