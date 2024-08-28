@@ -15,7 +15,7 @@ import shared.physical_education as pe
 import cheetah
 import acinoset_misc as misc
 from acinoset_models import MotionModel, PoseModelGMM
-from py_utils import data_ops
+from common.py_utils import data_ops
 
 
 @dataclass
@@ -193,7 +193,7 @@ class CheetahEstimator:
         # Init from previous run FTE.
         data_dir = self.params.data_dir if out_dir_prefix is None else os.path.join(
             out_dir_prefix,
-            self.params.data_dir.split("/cheetah_videos/")[1])
+            self.params.data_dir.split("cheetah_videos")[1][1:])
         # fte_states = data_ops.load_pickle(os.path.join(self.params.data_dir, "dynamic_auto", "fte.pickle"))
         fte_states = data_ops.load_pickle(
             os.path.join(data_dir, "fte_kinematic" if not monocular else f"fte_kinematic_{self.scene.cam_idx}",
@@ -414,6 +414,7 @@ def init_trajectory(root_dir: str,
                     data_path: str,
                     cheetah_name: str,
                     kinetic_dataset: bool,
+                    solver_path: str,
                     start_frame: int = -1,
                     end_frame: int = -1,
                     dlc_thresh: float = 0.5,
@@ -530,10 +531,7 @@ def init_trajectory(root_dir: str,
     cheetah_estimator = CheetahEstimator(cheetah_name, data_path, robot, params, scene, scale_forces_by, position_funcs,
                                          kinematic_model, enable_eom_slack)
     # Set the solver to be used - IPOPT in this case.
-    if platform.system() == "Linux":
-        pe.utils.set_ipopt_path("/home/zico/lib/ipopt/build/bin/ipopt")
-    else:
-        pe.utils.set_ipopt_path("/Users/zico/msc/dev/lib/Ipopt/build/bin/ipopt")
+    pe.utils.set_ipopt_path(solver_path)
 
     return cheetah_estimator
 
@@ -654,7 +652,7 @@ def determine_contacts(estimator: CheetahEstimator,
     print("Initialise trajectory with previous estimation of kinematics")
     data_dir = estimator.params.data_dir if out_dir_prefix is None else os.path.join(
         out_dir_prefix,
-        estimator.params.data_dir.split("/cheetah_videos/")[1])
+        estimator.params.data_dir.split("cheetah_videos")[1][1:])
     # Init from previous run FTE.
     fte_states = data_ops.load_pickle(
         os.path.join(data_dir, "fte_kinematic" if not monocular else f"fte_kinematic_{estimator.scene.cam_idx}",
@@ -737,7 +735,7 @@ def estimate_kinetics(estimator: CheetahEstimator,
     print("Initialise trajectory with previous estimation of kinematics")
     # Init from previous run FTE.
     data_dir = params.data_dir if out_dir_prefix is None else os.path.join(out_dir_prefix,
-                                                                           params.data_dir.split("/cheetah_videos/")[1])
+                                                                           params.data_dir.split("cheetah_videos")[1][1:])
     fte_states = data_ops.load_pickle(
         os.path.join(
             data_dir, "fte_kinematic" if estimator.scene.cam_idx is None or
@@ -975,7 +973,7 @@ def estimate_grf(estimator: CheetahEstimator, solver_output: bool = True, out_di
     print("Initialise trajectory with previous estimation of torques")
     # Init from previous run FTE.
     data_dir = params.data_dir if out_dir_prefix is None else os.path.join(out_dir_prefix,
-                                                                           params.data_dir.split("/cheetah_videos/")[1])
+                                                                           params.data_dir.split("cheetah_videos")[1][1:])
     fte_states = data_ops.load_pickle(os.path.join(data_dir, "fte_kinetic", "fte.pickle"))
     # Initialise the variable timestep from the previous optimisation.
     # prev_cheetah = data_ops.load_pickle(os.path.join(params.data_dir, "fte_kinetic", "cheetah.pickle"))
